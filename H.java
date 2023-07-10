@@ -54,7 +54,10 @@ final class SfxNoiseGenerator
     if (DURATION <= Integer.MIN_VALUE + 6900 || DURATION >= Integer.MAX_VALUE - 6900)
       System.out.println(
           "[!] You can set variable \"DURATION\" to a negative number like such as -1 for the generator to play INFINITELY!");
+    StringBuilder helpCommandMsg = new StringBuilder(
+        "Help menu\nType \"help\" to see this message\nUse commands like so: name arguments\n");
 
+    registerCommand("help", "Shows this messages", () -> print(helpCommandMsg.toString()));
     registerCommand("set_volume", "Sets the volume on a range of 0 to 1 with 1 being MAX and 0 being MUTE.",
         new Command() {
 
@@ -78,37 +81,17 @@ final class SfxNoiseGenerator
             }
           }
         });
+
     registerCommand("exit", "Exits the program.", () -> System.exit(0));
 
-    registerCommand("worker_start",
-        "Starts the audio worker if it is not started.\nNote: This is not the same as just unpausing as this operation\nworks by literally stopping the audio thread.\nUse with car as this command recreates the worker thread.",
-        () -> {
-          if (audioWorker != null && (audioWorker.isInterrupted() || !audioWorker.isAlive()))
-          {
-            try
-            {
-              validate();
-            } catch (Exception e)
-            {
-              e.printStackTrace();
-            }
-            print("Booted the audio worker thread...\nStop it with \"worker_stop\"");
-          }
-        });
+    registerCommand("start", "Starts/resumes the current audio play", SfxNoiseGenerator::start);
 
-    registerCommand("worker_stop",
-        "Stops the audio worker if it is currently working.\nNote: This is not the same as pausing as this operation\nworks by literally stopping the audio thread.\nThe system recreates the worker on a restart.\nThus, doing a stop and start restarts the worker thread.",
-        () -> {
-          if (audioWorker != null && (!audioWorker.isInterrupted() || audioWorker.isAlive()))
-          {
-            audioWorker.interrupt();
-            print("Interrupted the audio worker thread...\nStart it again with \"worker_start\"");
-          }
-        });
+    registerCommand("stop", "Stops/pauses the current audio play", SfxNoiseGenerator::stop);
+
+    registerCommand("what_state", "Retrieves the state of the current audio pipeline.", SfxNoiseGenerator::state);
 
     AtomicInteger commands_i = new AtomicInteger(0);
-    StringBuilder helpCommandMsg = new StringBuilder(
-        "Help menu\nType \"help\" to see this message\nUse commands like so: name arguments\n");
+
     commandsDescription.forEach((key, val) -> {
       helpCommandMsg.append("\n").append(commands_i.incrementAndGet())
           .append(".\t").append(key).append("\n\t\tParameters: ")
@@ -117,19 +100,19 @@ final class SfxNoiseGenerator
       {
         StringBuilder sb = new StringBuilder();
         for (String line : val.split("\n"))
-          sb.append("\t\t             ").append(line);
+          sb.append("\n\t\t             ").append(line);
         helpCommandMsg.append(sb.toString());
       }
+      else helpCommandMsg.append("\n\t\t             ").append(val);
     });
-    helpStr = helpCommandMsg.toString();
-
-    registerCommand("help", "Shows this messages", () -> print(helpStr));
 
     System.out.println("[!] Type \"help\" for a list of commands.");
 
     validate();
 
-    Runtime.getRuntime().gc(); // we are done with most of the init stuffs, so suggest the gc to clean up.
+    /*------------------------------------------------------------------------------------------------------ /
+    / Runtime.getRuntime().gc(); // we are done with most of the init stuffs, so suggest the gc to clean up. /
+    /-------------------------------------------------------------------------------------------------------*/
 
     ioWorker = new Thread(() -> {
       BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
@@ -145,6 +128,7 @@ final class SfxNoiseGenerator
         }
       }
     });
+    ioWorker.start();
 
   }
 
@@ -153,7 +137,6 @@ final class SfxNoiseGenerator
   static SourceDataLine line;
   static HashMap< String, Command > commands = new HashMap<>();
   static HashMap< String, String > commandsDescription = new HashMap<>();
-  static String helpStr;
 
   static void validate()
       throws Exception
@@ -173,7 +156,9 @@ final class SfxNoiseGenerator
 
   static void generateAndPlayAudio(Consumer< ByteBuffer > noiseStuffs, SourceDataLine line)
   {
-    line.start();
+    /*------------- /
+    / line.start(); /
+    /--------------*/
     System.out.println("[!] Playing for: " + (DURATION < 0 ? "INF" : DURATION) + "s");
 
     int bufferSize = DURATION >= 0 ? (int) (SAMPLE_RATE * DURATION * 2) : 4096;
@@ -249,7 +234,19 @@ final class SfxNoiseGenerator
   static void stop()
   {
     if (line != null)
+    {
       line.stop();
+      print("Pipeline stopped playback");
+    }
+  }
+
+  static void start()
+  {
+    if (line != null)
+    {
+      line.start();
+      print("Pipeline resumed playback");
+    }
   }
 
   static void state()
