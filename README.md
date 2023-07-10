@@ -6,6 +6,8 @@
 
 <div align="center"><code>Noise Generator written using Java with a simple text interface.</code></div>
 
+This is a program primarily targetted towards generating static noises or more specifically static **colored** noises. You can find what they are about [here on Wikipedia](https://en.wikipedia.org/wiki/Colors_of_noise).
+
 ## Running
 
 Use any Java `15+` runtime and just run:
