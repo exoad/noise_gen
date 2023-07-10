@@ -41,6 +41,7 @@ final class SfxNoiseGenerator
             == SFX NoiseGenerator ==
             Copyright (C) Jack Meng (AKA exoad) 2023. All rights reserved.
             > Creates a configurable noise generator for personal enjoyment and/or educational purposes. Enjoy!
+            > What is color of noise? Check it out here: https://en.wikipedia.org/wiki/Colors_of_noise 
 
             [ Configuration ]
             SAMPLERATE = %d [Hz] (0-INF)
@@ -89,6 +90,40 @@ final class SfxNoiseGenerator
     registerCommand("stop", "Stops/pauses the current audio play", SfxNoiseGenerator::stop);
 
     registerCommand("what_state", "Retrieves the state of the current audio pipeline.", SfxNoiseGenerator::state);
+
+    registerCommand("sfx_validate",
+        "Validates the current configuration and resets the audio pipeline with new information.\nThis command should rarely be used.",
+        () -> {
+          try
+          {
+            validate();
+            print("Validation complete.");
+          } catch (Exception e)
+          {
+            e.printStackTrace();
+          }
+        });
+
+    registerCommand("sfx_kill",
+        "Kills the pipeline by stopping playback ENTIRELY meaning a validation is required.\nThis command should rarely be used.",
+        SfxNoiseGenerator::kill);
+
+    registerCommand("sfx_gc", "Calls the Java Garbage Collector.", () -> {
+      double currentUsed = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1000000d;
+      Runtime.getRuntime().gc();
+      double now = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1000000d;
+      print("GCed. " + currentUsed + " MB => " + now + " MB (" + ((currentUsed - now) / currentUsed) * -100d + "%)");
+    });
+
+    registerCommand("sfx_config", "Prints the current configuration", () -> print(
+        """
+        SAMPLERATE = %d [Hz] (0-INF)
+        DURATION   = %d [s] (-INF-INF)
+        SPEED      = %f [x] (0-1)
+        VOLUME     = %f [dB] (0-1)
+        NOISE      = %s
+        """
+            .formatted(SAMPLE_RATE, DURATION, SPEED, VOLUME, TYPE.name())));
 
     AtomicInteger commands_i = new AtomicInteger(0);
 
@@ -150,6 +185,11 @@ final class SfxNoiseGenerator
     Consumer< ByteBuffer > noiseStuffs = TYPE == NoiseType.WHITE ? SfxNoiseGenerator::generateWhiteNoise
         : SfxNoiseGenerator::generateBrownNoise;
 
+    if (audioWorker != null)
+    {
+      line.close();
+      audioWorker.interrupt();
+    }
     audioWorker = new Thread(() -> generateAndPlayAudio(noiseStuffs, line));
     audioWorker.start();
   }
@@ -249,10 +289,24 @@ final class SfxNoiseGenerator
     }
   }
 
+  static void kill()
+  {
+    if (line != null)
+    {
+      line.stop();
+      line.drain();
+      line.close();
+      print("Pipeline killed, validation required for reuse.");
+    }
+  }
+
   static void state()
   {
     if (line != null)
-      print("Sound Pipeline isActive? " + (line.isActive() ? "YES" : "NO"));
+      print("Active: " + (line.isActive() ? "YES" : "NO") + "\nPipeline frame pos.: "
+          + line.getFramePosition() + "\nBuffer size: " + line.getBufferSize() + "\nBytes reachable: "
+          + line.available()
+          + "\nAudio Framerate: " + line.getFormat().getFrameRate());
   }
 
   static void registerCommand(String commandName, String description, Command command)
